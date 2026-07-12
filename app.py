@@ -271,7 +271,7 @@ def extract_text_from_image(image_path: str) -> str:
     if has_tesseract:
         try:
             img = Image.open(image_path)
-            text = pytesseract.image_to_string(img, lang="eng")
+            text = pytesseract.image_to_string(img, lang="eng", timeout=20)
             return text.strip()
         except Exception:
             pass
@@ -308,11 +308,11 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         return "[ERROR: The PDF has no selectable text, and server-side PDF-to-image conversion tools are not installed. Please upload your document as an image file (PNG/JPG) instead.]"
 
     try:
-        pages = convert_from_path(pdf_path, 300)
+        pages = convert_from_path(pdf_path, 150)
         for i, page in enumerate(pages):
             if has_tesseract:
                 try:
-                    text = pytesseract.image_to_string(page, lang="eng")
+                    text = pytesseract.image_to_string(page, lang="eng", timeout=20)
                 except Exception:
                     text = extract_text_from_pil_image(page)
             else:
