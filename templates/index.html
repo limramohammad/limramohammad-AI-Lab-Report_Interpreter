@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocAI — Medical Report Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="mark">
+        <img class="mark-logo" src="{{ url_for('static', filename='logo.png') }}" alt="DocAI Logo">
+        <div>
+          <div class="mark-text">DocAI</div>
+        </div>
+      </div>
+      <div class="mark-sub">Report Analysis Console</div>
+      <svg class="waveform" viewBox="0 0 260 22" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0,11 L40,11 L48,2 L56,20 L64,11 L100,11 L108,4 L116,18 L124,11 L260,11"/>
+      </svg>
+    </div>
+
+    <button class="sidebar-new-btn" onclick="startNewAnalysis()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      New analysis
+    </button>
+
+    <div class="sidebar-section-label">Recent reports</div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty" id="historyEmpty">No reports analyzed yet.<br>Upload one to get started.</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-row">
+        <span class="status-dot" id="ollamaStatusDot"></span>
+        <span id="ollamaStatusText">Checking engine…</span>
+      </div>
+      <div id="ollamaModelText">—</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbarTitle">New analysis <span class="dim">/ no report loaded</span></div>
+      <div class="topbar-badge">
+        <span class="status-dot" id="topbarStatusDot"></span>
+        <span id="topbarStatusText">Engine offline</span>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="intro-block" id="introBlock">
+        <h1 class="intro-heading"><span class="gradient-text">DocAI</span></h1>
+        <p class="intro-sub">Upload a PDF, snap a photo, or paste your report. Every value gets checked, clearly explained, and processed locally on your device.</p>
+        <div class="type-chips">
+          <span class="type-chip">CBC</span>
+          <span class="type-chip">LFT / RFT</span>
+          <span class="type-chip">CSF</span>
+          <span class="type-chip">Biopsy</span>
+          <span class="type-chip">Ultrasound</span>
+          <span class="type-chip">X-Ray / CT / MRI</span>
+          <span class="type-chip">Prescriptions</span>
+        </div>
+      </div>
+
+      <div class="panel" id="uploadPanel">
+        <div class="panel-head">
+          <h2><span class="step-num">1</span> Provide a report</h2>
+          <div class="tabs">
+            <button class="tab-btn active" id="tabUploadBtn" onclick="switchTab('upload')">Upload file</button>
+            <button class="tab-btn" id="tabTextBtn" onclick="switchTab('text')">Paste text</button>
+          </div>
+        </div>
+
+        <div class="tab-content active" id="tabUpload">
+          <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="dropzone-title">Drop a file or click to browse</div>
+            <div class="dropzone-sub">PDF (multi-page supported) or image — PNG, JPG · max 16MB</div>
+            <div id="fileChipHolder"></div>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg" aria-label="Upload report file">
+        </div>
+
+        <div class="tab-content" id="tabText">
+          <label class="field-label" for="reportTextArea">Report text</label>
+          <textarea id="reportTextArea" placeholder="Paste the report text here, e.g.&#10;Hemoglobin: 9.8 g/dl (13.5-17.5)&#10;WBC: 12,400 /cumm (4000-11000)"></textarea>
+        </div>
+
+
+
+        <button class="btn-primary" id="analyzeBtn" onclick="submitAnalysis()" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+          Analyze report
+        </button>
+
+        <div class="error-box" id="errorBox"></div>
+      </div>
+
+      <div class="panel loading-panel" id="loadingPanel">
+        <div class="scan-bar"></div>
+        <div class="loading-text" id="loadingText">Reading report…</div>
+      </div>
+
+      <div class="panel result-panel" id="resultPanel">
+        <div class="panel-head">
+          <h2><span class="step-num">2</span> Analysis</h2>
+        </div>
+        <div class="result-meta-row">
+          <span class="src" id="resultSrc">—</span>
+          <span class="src" id="resultTime">—</span>
+        </div>
+        <div class="analysis-output" id="analysisOutput"></div>
+
+        <span class="extracted-toggle" onclick="toggleExtracted()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          View extracted text
+        </span>
+        <div class="extracted-box" id="extractedTextBox"></div>
+      </div>
+
+      <div class="panel chat-panel" id="chatPanel" style="display: none;">
+        <div class="panel-head">
+          <h2><span class="step-num">3</span> Patient Q&A Assistant</h2>
+          <span class="chat-status-badge" id="chatStatusBadge">
+            <span class="status-dot online"></span>
+            <span id="chatStatusText">RAG Retrieval Ready</span>
+          </span>
+        </div>
+        
+        <div class="chat-history" id="chatHistory">
+          <div class="chat-message system">
+            <div class="msg-sender">AI Patient Assistant</div>
+            <div class="msg-content">Hello! I have loaded your report. How can I help you manage or reduce your levels? You can ask me follow-up questions about diet, exercise, or lifestyle.</div>
+          </div>
+        </div>
+        
+        <div class="chat-suggestions-container" id="chatSuggestionsContainer" style="display: none;">
+          <div class="chat-suggestions-label">Suggested Questions:</div>
+          <div class="chat-suggestions" id="chatSuggestions">
+            <!-- Suggestion chips will be injected here dynamically -->
+          </div>
+        </div>
+        
+        <div class="chat-input-container">
+          <textarea id="chatInput" placeholder="Ask a question about your report, e.g., 'How can I reduce my cholesterol?'..." rows="2"></textarea>
+          <button class="btn-primary btn-send" id="chatSendBtn" onclick="sendChatMessage()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            Send
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=1.0.5"></script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
