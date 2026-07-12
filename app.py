@@ -141,7 +141,7 @@ try:
 except Exception:
     ai_client = None
 
-MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = "llama-3.1-8b-instant"
 
 
 def is_ollama_available() -> bool:
