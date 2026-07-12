@@ -618,10 +618,15 @@ Instructions:
         return jsonify({"success": False, "error": f"Failed to get response: {str(e)}"}), 500
 
 
-def open_browser():
-    threading.Timer(1.5, lambda: webbrowser.open("http://127.0.0.1:5002")).start()
+def open_browser(port):
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
 
 
 if __name__ == '__main__':
-    open_browser()
-    app.run(host='0.0.0.0', port=5002, debug=False)
+    # Render provides a $PORT environment variable. If it doesn't exist, default to 5002.
+    port = int(os.environ.get("PORT", 5002))
+    # Only open browser if running locally (PORT not defined in env)
+    if "PORT" not in os.environ:
+        open_browser(port)
+    # You must bind to 0.0.0.0 so Render can route traffic to it
+    app.run(host='0.0.0.0', port=port, debug=False)
