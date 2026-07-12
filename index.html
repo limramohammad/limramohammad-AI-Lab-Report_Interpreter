@@ -99,6 +99,11 @@
 
 
 
+        <div class="focus-question-container">
+          <label class="field-label" for="questionInput">Specific questions or concerns (optional)</label>
+          <input type="text" id="questionInput" placeholder="e.g., Why is my hemoglobin low? What does ALT mean?">
+        </div>
+
         <button class="btn-primary" id="analyzeBtn" onclick="submitAnalysis()" disabled>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
           Analyze report
@@ -114,12 +119,50 @@
 
       <div class="panel result-panel" id="resultPanel">
         <div class="panel-head">
-          <h2><span class="step-num">2</span> Analysis</h2>
+          <h2><span class="step-num">2</span> Report Console</h2>
         </div>
         <div class="result-meta-row">
           <span class="src" id="resultSrc">—</span>
           <span class="src" id="resultTime">—</span>
         </div>
+
+        <!-- Dashboard Summary Widget -->
+        <div class="dashboard-stats" id="dashboardStats" style="display: none;">
+          <div class="stat-card total">
+            <div class="stat-value" id="statTotalVal">0</div>
+            <div class="stat-label">Total Tests</div>
+          </div>
+          <div class="stat-card normal">
+            <div class="stat-value" id="statNormalVal">0</div>
+            <div class="stat-label">Normal</div>
+          </div>
+          <div class="stat-card low">
+            <div class="stat-value" id="statLowVal">0</div>
+            <div class="stat-label">Low Value</div>
+          </div>
+          <div class="stat-card high">
+            <div class="stat-value" id="statHighVal">0</div>
+            <div class="stat-label">High Value</div>
+          </div>
+        </div>
+
+        <!-- Toolbar (Search & Filter) -->
+        <div class="filter-toolbar" id="filterToolbar" style="display: none;">
+          <div class="search-wrapper">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" id="paramSearchInput" placeholder="Filter parameters by name..." oninput="filterParameters()">
+          </div>
+          <div class="filter-chips">
+            <button class="filter-chip active" id="filterAllBtn" onclick="setParamFilter('all')">All</button>
+            <button class="filter-chip abnormal" id="filterAbnormalBtn" onclick="setParamFilter('abnormal')">Abnormal</button>
+            <button class="filter-chip normal" id="filterNormalBtn" onclick="setParamFilter('normal')">Normal</button>
+          </div>
+        </div>
+
+        <!-- Parameter Cards Grid -->
+        <div class="parameters-grid" id="parametersGrid" style="display: none;"></div>
+
+        <!-- General Findings & Narrative Output -->
         <div class="analysis-output" id="analysisOutput"></div>
 
         <span class="extracted-toggle" onclick="toggleExtracted()">
