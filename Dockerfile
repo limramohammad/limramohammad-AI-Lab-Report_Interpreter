@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Grant execution rights to the startup script
-RUN chmod +x start.sh
+# Grant execution rights to the startup script and ensure the workspace is writable
+RUN chmod +x start.sh && chmod -R 777 /app
 
 # Run the startup script
 CMD ["./start.sh"]
