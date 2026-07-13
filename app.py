@@ -5,10 +5,7 @@ import uuid
 import json
 import threading
 import webbrowser
-import random
-import re
 from datetime import datetime
-from functools import wraps
 
 try:
     from dotenv import load_dotenv
@@ -16,7 +13,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, Response
 from werkzeug.utils import secure_filename
 
 import pytesseract
@@ -25,98 +22,9 @@ from pdf2image import convert_from_path
 import PyPDF2
 from groq import Groq
 from medical_kb import retrieve_guidelines
-from database import (
-    init_db,
-    create_user,
-    get_user_by_email,
-    save_otp,
-    verify_otp,
-    load_history_for_user,
-    save_history_for_user,
-    delete_history_item_for_user,
-    migrate_guest_history
-)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "doctor-time-saver-secret-key")
-
-# Initialize database tables
-init_db()
-
-@app.before_request
-def ensure_session_id():
-    # Ensure either user_id or guest_id is present
-    if "user_id" not in session and "guest_id" not in session:
-        session["guest_id"] = f"guest_{uuid.uuid4()}"
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "user_id" not in session:
-            if request.path.startswith("/api/") or request.path in ["/history", "/analyze"]:
-                return jsonify({"success": False, "error": "Unauthorized"}), 401
-            return redirect(url_for("auth_page"))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def send_otp_email(recipient_email, otp_code):
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    
-    smtp_server = os.environ.get("SMTP_SERVER")
-    smtp_port = os.environ.get("SMTP_PORT")
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-    
-    if not (smtp_server and smtp_port and smtp_user and smtp_password):
-        # Console output if no SMTP configured (Dev Mode)
-        print(f"\n==================================================")
-        print(f"[OTP DEV MODE] Verification Code for {recipient_email}: {otp_code}")
-        print(f"==================================================\n")
-        return True, True  # success, dev_mode
-        
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = smtp_user
-        msg['To'] = recipient_email
-        msg['Subject'] = f"DocAI - One-Time Password: {otp_code}"
-        
-        body = f"""
-        <html>
-        <body style="font-family: 'Inter', sans-serif; background-color: #060913; color: #f3f4f6; padding: 40px;">
-            <div style="max-width: 500px; margin: 0 auto; background: rgba(13, 20, 38, 0.95); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);">
-                <div style="background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%); padding: 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 24px; font-family: 'Outfit', sans-serif;">DocAI</h1>
-                    <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 13px;">Report Analysis Console</p>
-                </div>
-                <div style="padding: 40px 30px; text-align: center;">
-                    <p style="font-size: 16px; margin-top: 0; color: #f3f4f6;">Hello,</p>
-                    <p style="font-size: 14px; color: #a1a1aa; line-height: 1.6;">Use the following One-Time Password (OTP) to sign in or register on DocAI. This code will expire in 10 minutes.</p>
-                    <div style="display: inline-block; margin: 25px 0; padding: 15px 35px; background: rgba(255,255,255,0.03); border-radius: 14px; font-size: 32px; font-family: 'Outfit', sans-serif; font-weight: bold; letter-spacing: 5px; color: #06b6d4; border: 1px solid rgba(255,255,255,0.07);">
-                        {otp_code}
-                    </div>
-                    <p style="font-size: 12px; color: #71717a; margin-bottom: 0;">If you did not request this verification code, you can safely ignore this email.</p>
-                </div>
-                <div style="background: rgba(0, 0, 0, 0.2); padding: 20px; text-align: center; font-size: 11px; color: #71717a; border-top: 1px solid rgba(255,255,255,0.05);">
-                    &copy; 2026 DocAI. Secure Clinical Co-pilot.
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        msg.attach(MIMEText(body, 'html'))
-        
-        # Connect to server using TLS
-        server = smtplib.SMTP(smtp_server, int(smtp_port))
-        server.starttls()
-        server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, recipient_email, msg.as_string())
-        server.quit()
-        return True, False  # success, not dev_mode
-    except Exception as e:
-        print(f"Error sending email: {str(e)}")
-        return False, str(e)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf"}
@@ -131,21 +39,24 @@ MAX_HISTORY_ITEMS = 50
 
 
 def load_history() -> list:
-    identifier = session.get("user_id") or session.get("guest_id")
-    if not identifier:
+    if not os.path.exists(HISTORY_FILE):
         return []
-    return load_history_for_user(identifier)
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
 
 
-def save_history(entry: dict, identifier: str = None) -> None:
-    if not identifier:
-        try:
-            identifier = session.get("user_id") or session.get("guest_id")
-        except RuntimeError:
-            return
-    if not identifier:
-        return
-    save_history_for_user(identifier, entry)
+def save_history(entry: dict) -> None:
+    try:
+        history = load_history()
+        history.insert(0, entry)
+        history = history[:MAX_HISTORY_ITEMS]
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def summarize_for_history(analysis_text: str, max_len: int = 90) -> str:
@@ -415,94 +326,6 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         return f"[PDF OCR ERROR: {e}]"
 
 
-@app.route("/auth")
-def auth_page():
-    if "user_id" in session:
-        return redirect(url_for("index"))
-    return render_template("auth.html")
-
-
-@app.route("/api/auth/send-otp", methods=["POST"])
-def send_otp():
-    data = request.json or {}
-    email = data.get("email", "").strip()
-    if not email:
-        return jsonify({"success": False, "error": "Email is required"}), 400
-        
-    if not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
-        return jsonify({"success": False, "error": "Invalid email address"}), 400
-        
-    otp_code = f"{random.randint(100000, 999999)}"
-    save_otp(email, otp_code)
-    
-    success, dev_mode_or_error = send_otp_email(email, otp_code)
-    
-    if success:
-        return jsonify({
-            "success": True, 
-            "dev_mode": dev_mode_or_error is True,
-            "otp": otp_code if dev_mode_or_error is True else None
-        })
-    else:
-        return jsonify({"success": False, "error": f"Failed to send verification email: {dev_mode_or_error}"}), 500
-
-
-@app.route("/api/auth/verify-otp", methods=["POST"])
-def verify_otp_route():
-    data = request.json or {}
-    email = data.get("email", "").strip()
-    otp_code = data.get("otp", "").strip()
-    
-    if not email or not otp_code:
-        return jsonify({"success": False, "error": "Email and OTP are required"}), 400
-        
-    is_valid = verify_otp(email, otp_code)
-    if not is_valid:
-        return jsonify({"success": False, "error": "Invalid or expired verification code"}), 400
-        
-    user = get_user_by_email(email)
-    is_new_user = user is None
-    
-    user_id = create_user(email)
-    
-    # Migrate guest history to user_id
-    guest_id = session.get("guest_id")
-    if guest_id:
-        try:
-            migrate_guest_history(guest_id, user_id)
-            # Remove guest_id from session once migrated
-            session.pop("guest_id", None)
-        except Exception as e:
-            print(f"Failed to migrate guest history: {str(e)}")
-            
-    session["user_id"] = user_id
-    session["user_email"] = email
-    
-    if is_new_user and os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                old_history = json.load(f)
-                if isinstance(old_history, list):
-                    for entry in old_history:
-                        save_history_for_user(user_id, entry)
-        except Exception as e:
-            print(f"Failed to migrate history: {str(e)}")
-            
-    return jsonify({
-        "success": True, 
-        "user": {
-            "id": user_id,
-            "email": email
-        }
-    })
-
-
-@app.route("/api/auth/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("auth_page"))
-
-
 @app.route("/")
 def index():
     history = load_history()
@@ -547,10 +370,10 @@ def history():
 @app.route("/history/<item_id>", methods=["DELETE"])
 def delete_history_item(item_id):
     try:
-        identifier = session.get("user_id") or session.get("guest_id")
-        if not identifier:
-            return jsonify({"success": False, "error": "No session"}), 400
-        delete_history_item_for_user(identifier, item_id)
+        raw_history = load_history()
+        new_history = [item for item in raw_history if item.get("id") != item_id]
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_history, f, ensure_ascii=False, indent=2)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -558,7 +381,6 @@ def delete_history_item(item_id):
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    user_identifier = session.get("user_id") or session.get("guest_id")
     question = request.form.get("question", "").strip()
     
     extracted_text = ""
@@ -672,7 +494,7 @@ def analyze():
             "timestamp_display": timestamp_disp
         }
         
-        save_history(history_entry, identifier=user_identifier)
+        save_history(history_entry)
         
         yield json.dumps({
             "event": "done",
