@@ -6,4 +6,3 @@ pillow==12.3.0
 groq
 python-dotenv
 gunicorn
-pipfreeze
